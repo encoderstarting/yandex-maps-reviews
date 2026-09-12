@@ -4,7 +4,7 @@ Laravel API отвечает за cookie-аутентификацию через
 
 ## Требования
 
-- PHP 8.3 или новее;
+- PHP 8.4.1 или новее;
 - Composer;
 - PostgreSQL и Redis либо Docker Desktop с Laravel Sail.
 

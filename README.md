@@ -13,7 +13,7 @@ frontend/  Vue 3 SPA, Vite, Tailwind CSS
 
 ## Быстрый запуск через Docker
 
-Понадобятся Docker Desktop, PHP 8.3+, Composer, Node.js 20.19+ и pnpm 11+.
+Понадобятся Docker Desktop, PHP 8.4.1+, Composer, Node.js 22.13+ и pnpm 11.19.
 
 ### 1. Бэкенд, PostgreSQL и Redis
 
