@@ -33,6 +33,12 @@ pnpm audit --prod
 
 Sanctum работает через HTTP-only cookie. Axios настроен с `withCredentials` и `withXSRFToken`; хранить авторизационные данные в `localStorage` не требуется.
 
+## Production-контейнер
+
+Файл [`Dockerfile`](Dockerfile) собирает статические файлы SPA и переносит их в небольшой Nginx-образ. В production `VITE_API_URL` оставляется пустым: браузер обращается к API на том же HTTPS-домене, а Caddy направляет служебные маршруты в Laravel. Благодаря этому не требуется междоменная настройка cookie.
+
+Полный запуск всех контейнеров на VPS описан в [`../deploy/README.md`](../deploy/README.md).
+
 ## Структура
 
 - `src/App.vue` — экран входа, форма ссылки, polling, карточка и отзывы;

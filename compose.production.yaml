@@ -1,0 +1,123 @@
+name: yandex-reviews
+
+services:
+  proxy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN:?Укажите APP_DOMAIN в deploy/.env}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      backend:
+        condition: service_healthy
+      frontend:
+        condition: service_healthy
+    networks:
+      - public
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: ""
+    restart: unless-stopped
+    expose:
+      - "80"
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1/"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    networks:
+      - public
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - ${DEPLOY_ENV_FILE:-./deploy/.env}
+    expose:
+      - "80"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1/up"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    networks:
+      - public
+      - private
+
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    user: www-data
+    command: php artisan queue:work redis --sleep=3 --tries=4 --timeout=1800 --max-time=3600
+    stop_grace_period: 30m
+    env_file:
+      - ${DEPLOY_ENV_FILE:-./deploy/.env}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - private
+
+  postgres:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_DATABASE:?Укажите DB_DATABASE в deploy/.env}
+      POSTGRES_USER: ${DB_USERNAME:?Укажите DB_USERNAME в deploy/.env}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Укажите DB_PASSWORD в deploy/.env}
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -q -d $$POSTGRES_DB -U $$POSTGRES_USER"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - private
+
+  redis:
+    image: redis:7.4-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - private
+
+networks:
+  public:
+  private:
+    internal: true
+
+volumes:
+  caddy_data:
+  caddy_config:
+  postgres_data:
+  redis_data:

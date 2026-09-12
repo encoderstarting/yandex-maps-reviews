@@ -81,6 +81,12 @@ REDIS_QUEUE_RETRY_AFTER=2100
 
 В production нужно указать фактические HTTPS-домены, установить `APP_ENV=production`, `APP_DEBUG=false` и заменить демонстрационный пароль.
 
+## Production-контейнер
+
+Файл [`Dockerfile`](Dockerfile) собирает отдельный Apache/PHP 8.4 образ с расширениями PostgreSQL и Redis. В общем production Compose тот же образ используется для API и worker, но с разными командами запуска. Laravel доверяет заголовкам внутреннего reverse proxy, а внешние запросы принимает Caddy по HTTPS.
+
+Запускать контейнер отдельно не требуется. Полная последовательность для VPS находится в [`../deploy/README.md`](../deploy/README.md). Миграции и seeder выполняются явными командами после старта, а не автоматически при каждом перезапуске API.
+
 ## Настройки парсера
 
 ```dotenv
