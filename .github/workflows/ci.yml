@@ -1,0 +1,82 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Laravel
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - name: Получить код
+        uses: actions/checkout@v7
+
+      - name: Настроить PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: mbstring, pdo_sqlite
+          coverage: none
+
+      - name: Проверить Composer
+        run: composer validate --strict
+
+      - name: Установить зависимости
+        run: composer install --no-interaction --prefer-dist --no-progress
+
+      - name: Проверить стиль
+        run: vendor/bin/pint --test
+
+      - name: Запустить тесты
+        run: php artisan test --compact
+
+      - name: Проверить уязвимости
+        run: composer audit
+
+  frontend:
+    name: Vue
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - name: Получить код
+        uses: actions/checkout@v7
+
+      - name: Установить pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 11
+
+      - name: Настроить Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '20.19'
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Установить зависимости
+        run: pnpm install --frozen-lockfile
+
+      - name: Запустить тесты
+        run: pnpm test
+
+      - name: Собрать SPA
+        run: pnpm run build
+
+      - name: Проверить уязвимости
+        run: pnpm audit --prod
