@@ -7,6 +7,7 @@ use App\Contracts\OrganizationParser;
 use App\Data\ParsedOrganization;
 use App\Data\ParsedReview;
 use App\Exceptions\YandexMaps\YandexMapsBlockedException;
+use App\Exceptions\YandexMaps\YandexMapsLimitExceededException;
 use App\Exceptions\YandexMaps\YandexMapsSourceChangedException;
 use App\Exceptions\YandexMaps\YandexMapsUnavailableException;
 use App\Jobs\SyncOrganizationJob;
@@ -158,6 +159,26 @@ class SyncOrganizationJobTest extends TestCase
             'id' => $syncRun->id,
             'status' => SyncStatus::Failed->value,
             'error_code' => 'YANDEX_UNAVAILABLE',
+        ]);
+    }
+
+    public function test_page_limit_is_recorded_without_queue_retry(): void
+    {
+        $organization = Organization::factory()->create();
+        $syncRun = SyncRun::factory()->for($organization)->create();
+
+        (new SyncOrganizationJob($organization->id, $syncRun->id))->handle(
+            $this->parser(fn () => throw new YandexMapsLimitExceededException(
+                'Достигнут технический лимит.',
+            )),
+            app(PersistParsedOrganization::class),
+        );
+
+        $this->assertDatabaseHas('sync_runs', [
+            'id' => $syncRun->id,
+            'status' => SyncStatus::Failed->value,
+            'error_code' => 'SYNC_LIMIT_REACHED',
+            'error_message' => 'Достигнут технический лимит.',
         ]);
     }
 

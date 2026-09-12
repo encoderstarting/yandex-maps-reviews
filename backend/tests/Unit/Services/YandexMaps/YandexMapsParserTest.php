@@ -4,8 +4,8 @@ namespace Tests\Unit\Services\YandexMaps;
 
 use App\Contracts\OrganizationParser;
 use App\Exceptions\YandexMaps\YandexMapsBlockedException;
+use App\Exceptions\YandexMaps\YandexMapsLimitExceededException;
 use App\Exceptions\YandexMaps\YandexMapsSourceChangedException;
-use App\Exceptions\YandexMaps\YandexMapsUnavailableException;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
@@ -106,10 +106,31 @@ class YandexMapsParserTest extends TestCase
             'https://yandex.ru/maps/org/123456/reviews/?page=1' => Http::response($this->fixture('reviews-page-1.html')),
         ]);
 
-        $this->expectException(YandexMapsUnavailableException::class);
-        $this->expectExceptionMessage('безопасный предел');
+        $this->expectException(YandexMapsLimitExceededException::class);
+        $this->expectExceptionMessage('технического лимита страниц (1)');
 
         app(OrganizationParser::class)->parse('https://yandex.ru/maps/org/test/123456/');
+    }
+
+    public function test_parser_stops_successfully_after_maximum_accessible_reviews(): void
+    {
+        config()->set('yandex_maps.max_reviews', 3);
+        $firstPage = str_replace(
+            '"totalPages":2',
+            '"totalPages":200',
+            $this->fixture('reviews-page-1.html'),
+        );
+
+        Http::fake([
+            'https://yandex.ru/maps/org/test/123456/' => Http::response($this->fixture('overview.html')),
+            'https://yandex.ru/maps/org/123456/reviews/?page=1' => Http::response($firstPage),
+            'https://yandex.ru/maps/org/123456/reviews/?page=2' => Http::response($this->fixture('reviews-page-2.html')),
+        ]);
+
+        $result = app(OrganizationParser::class)->parse('https://yandex.ru/maps/org/test/123456/');
+
+        $this->assertCount(3, $result->reviews);
+        Http::assertSentCount(3);
     }
 
     private function fixture(string $name): string

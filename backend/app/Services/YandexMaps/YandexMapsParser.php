@@ -4,6 +4,7 @@ namespace App\Services\YandexMaps;
 
 use App\Contracts\OrganizationParser;
 use App\Data\ParsedOrganization;
+use App\Exceptions\YandexMaps\YandexMapsLimitExceededException;
 use App\Exceptions\YandexMaps\YandexMapsSourceChangedException;
 use App\Exceptions\YandexMaps\YandexMapsUnavailableException;
 use Closure;
@@ -20,8 +21,16 @@ class YandexMapsParser implements OrganizationParser
         $business = $this->extractor->extractBusiness($this->client->fetch($url));
         $reviewBaseUrl = $this->reviewBaseUrl($url, $business->externalId);
         $maxPages = (int) config('yandex_maps.max_pages', 100);
+        $maxReviews = (int) config('yandex_maps.max_reviews', 600);
+        $reviewsPerPage = (int) config('yandex_maps.reviews_per_page', 50);
         $reviewsById = [];
         $totalPages = 1;
+        $reportedTotalPages = 1;
+        $lastProcessedPage = 0;
+
+        if ($maxPages < 1 || $maxReviews < 1 || $reviewsPerPage < 1) {
+            throw new YandexMapsLimitExceededException('Лимиты парсера настроены некорректно.');
+        }
 
         for ($page = 1; $page <= $totalPages; $page++) {
             $html = $this->client->fetch($this->pageUrl($reviewBaseUrl, $page));
@@ -41,17 +50,17 @@ class YandexMapsParser implements OrganizationParser
                 throw new YandexMapsSourceChangedException('Яндекс Карты вернули неожиданную страницу отзывов.');
             }
 
-            $totalPages = $reviewPage->totalPages;
-
-            if ($totalPages > $maxPages) {
-                throw new YandexMapsUnavailableException(
-                    "Количество страниц отзывов превышает безопасный предел {$maxPages}.",
-                );
-            }
+            $reportedTotalPages = $reviewPage->totalPages;
+            $totalPages = min($reportedTotalPages, $maxPages);
+            $lastProcessedPage = $page;
 
             $newReviews = 0;
 
             foreach ($reviewPage->reviews as $review) {
+                if (count($reviewsById) >= $maxReviews) {
+                    break;
+                }
+
                 if (! isset($reviewsById[$review->externalId])) {
                     $newReviews++;
                 }
@@ -59,13 +68,26 @@ class YandexMapsParser implements OrganizationParser
                 $reviewsById[$review->externalId] = $review;
             }
 
-            $onProgress?->__invoke($page, $totalPages, count($reviewsById));
+            $progressPages = min($totalPages, (int) ceil($maxReviews / $reviewsPerPage));
+            $onProgress?->__invoke(min($page, $progressPages), $progressPages, count($reviewsById));
+
+            if (count($reviewsById) >= $maxReviews) {
+                break;
+            }
 
             if ($page < $totalPages && ($reviewPage->reviews === [] || $newReviews === 0)) {
                 throw new YandexMapsSourceChangedException(
                     'Пагинация остановилась до получения всех отзывов.',
                 );
             }
+        }
+
+        if ($lastProcessedPage === $maxPages
+            && $reportedTotalPages > $maxPages
+            && count($reviewsById) < $maxReviews) {
+            throw new YandexMapsLimitExceededException(
+                "Парсер достиг технического лимита страниц ({$maxPages}) до получения {$maxReviews} уникальных отзывов.",
+            );
         }
 
         return new ParsedOrganization(

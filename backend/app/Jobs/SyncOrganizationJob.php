@@ -6,6 +6,7 @@ use App\Actions\PersistParsedOrganization;
 use App\Contracts\OrganizationParser;
 use App\Exceptions\YandexMaps\YandexMapsBlockedException;
 use App\Exceptions\YandexMaps\YandexMapsException;
+use App\Exceptions\YandexMaps\YandexMapsLimitExceededException;
 use App\Exceptions\YandexMaps\YandexMapsSourceChangedException;
 use App\Exceptions\YandexMaps\YandexMapsUnavailableException;
 use App\Models\Organization;
@@ -95,6 +96,8 @@ class SyncOrganizationJob implements ShouldBeUnique, ShouldQueue
             $this->finishWithError($syncRun, SyncStatus::Blocked, 'YANDEX_BLOCKED', $exception->getMessage());
         } catch (YandexMapsSourceChangedException $exception) {
             $this->finishWithError($syncRun, SyncStatus::SourceChanged, 'SOURCE_CHANGED', $exception->getMessage());
+        } catch (YandexMapsLimitExceededException $exception) {
+            $this->finishWithError($syncRun, SyncStatus::Failed, 'SYNC_LIMIT_REACHED', $exception->getMessage());
         }
     }
 

@@ -11,6 +11,8 @@ return [
     'retries' => (int) env('YANDEX_MAPS_RETRIES', 2),
     'retry_delay_ms' => (int) env('YANDEX_MAPS_RETRY_DELAY_MS', 500),
     'max_pages' => (int) env('YANDEX_MAPS_MAX_PAGES', 100),
+    'max_reviews' => (int) env('YANDEX_MAPS_MAX_REVIEWS', 600),
+    'reviews_per_page' => 50,
 
     'user_agent' => env(
         'YANDEX_MAPS_USER_AGENT',
