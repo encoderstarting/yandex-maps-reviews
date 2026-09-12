@@ -17,10 +17,19 @@ const organizationUrl = ref('');
 const organizationUrlError = ref('');
 const addingOrganization = ref(false);
 const organizationNotice = ref('');
+const activeOrganizationId = ref(null);
+const reviews = ref([]);
+const reviewsMeta = ref(null);
+const reviewsLoading = ref(false);
+const reviewsError = ref('');
 let pollTimer = null;
+let reviewsRequestId = 0;
 
 const initials = computed(() => user.value?.name?.slice(0, 1).toUpperCase() ?? '?');
 const hasOrganizations = computed(() => organizations.value.length > 0);
+const activeOrganization = computed(() => (
+    organizations.value.find(({ id }) => id === activeOrganizationId.value) ?? null
+));
 
 const statusLabels = {
     pending: 'Ожидает запуска',
@@ -37,6 +46,24 @@ function statusLabel(status) {
 
 function isSyncing(organization) {
     return ['pending', 'running'].includes(organization.sync?.status);
+}
+
+function formatDate(value) {
+    if (!value) {
+        return 'Дата не указана';
+    }
+
+    const date = new Date(value);
+
+    if (Number.isNaN(date.getTime())) {
+        return 'Дата не указана';
+    }
+
+    return new Intl.DateTimeFormat('ru-RU', {
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+    }).format(date);
 }
 
 function stopPolling() {
@@ -62,12 +89,17 @@ function replaceOrganization(updatedOrganization) {
     } else {
         organizations.value[index] = updatedOrganization;
     }
+
+    activeOrganizationId.value ??= updatedOrganization.id;
 }
 
 function requestMessage(requestError, fallback) {
     if (requestError.response?.status === 401) {
         user.value = null;
         organizations.value = [];
+        activeOrganizationId.value = null;
+        reviews.value = [];
+        reviewsMeta.value = null;
         stopPolling();
 
         return 'Сессия завершилась. Войдите снова.';
@@ -113,6 +145,9 @@ async function logout() {
         await apiClient.delete('/logout');
         stopPolling();
         organizations.value = [];
+        activeOrganizationId.value = null;
+        reviews.value = [];
+        reviewsMeta.value = null;
         user.value = null;
     } catch {
         error.value = 'Не удалось выйти. Попробуйте ещё раз.';
@@ -126,6 +161,13 @@ async function loadOrganizations() {
     try {
         const response = await apiClient.get('/api/v1/organizations');
         organizations.value = response.data.data;
+        const selected = organizations.value.find(({ id }) => id === activeOrganizationId.value)
+            ?? organizations.value[0]
+            ?? null;
+
+        if (selected) {
+            await selectOrganization(selected);
+        }
         schedulePolling();
     } catch (requestError) {
         error.value = requestMessage(requestError, 'Не удалось загрузить компании.');
@@ -145,6 +187,7 @@ async function addOrganization() {
             url: organizationUrl.value,
         });
         replaceOrganization(response.data.data);
+        await selectOrganization(response.data.data);
         organizationUrl.value = '';
         organizationNotice.value = response.status === 201
             ? 'Компания добавлена. Начали сбор данных.'
@@ -162,6 +205,59 @@ async function addOrganization() {
     }
 }
 
+async function selectOrganization(organization) {
+    reviewsRequestId += 1;
+    activeOrganizationId.value = organization.id;
+    reviews.value = [];
+    reviewsMeta.value = null;
+    reviewsError.value = '';
+
+    if (organization.sync?.status === 'completed') {
+        await loadReviews(1);
+    }
+}
+
+async function loadReviews(page = 1) {
+    if (!activeOrganization.value || activeOrganization.value.sync?.status !== 'completed') {
+        return;
+    }
+
+    const organizationId = activeOrganization.value.id;
+    const requestId = ++reviewsRequestId;
+    reviewsLoading.value = true;
+    reviewsError.value = '';
+
+    try {
+        const response = await apiClient.get(
+            `/api/v1/organizations/${organizationId}/reviews`,
+            { params: { page } },
+        );
+
+        if (requestId !== reviewsRequestId || activeOrganizationId.value !== organizationId) {
+            return;
+        }
+
+        reviews.value = response.data.data;
+        reviewsMeta.value = response.data.meta;
+    } catch (requestError) {
+        if (requestId === reviewsRequestId) {
+            reviewsError.value = requestMessage(requestError, 'Не удалось загрузить отзывы.');
+        }
+    } finally {
+        if (requestId === reviewsRequestId) {
+            reviewsLoading.value = false;
+        }
+    }
+}
+
+async function changeReviewPage(page) {
+    if (page < 1 || page > (reviewsMeta.value?.last_page ?? 1) || reviewsLoading.value) {
+        return;
+    }
+
+    await loadReviews(page);
+}
+
 async function pollSyncStatuses() {
     pollTimer = null;
     const syncingOrganizations = organizations.value.filter(isSyncing);
@@ -174,6 +270,11 @@ async function pollSyncStatuses() {
             if (!isSyncing(organization)) {
                 const details = await apiClient.get(`/api/v1/organizations/${organization.id}`);
                 replaceOrganization(details.data.data);
+
+                if (activeOrganizationId.value === organization.id
+                    && details.data.data.sync?.status === 'completed') {
+                    await loadReviews(1);
+                }
             }
         } catch (requestError) {
             error.value = requestMessage(requestError, 'Не удалось обновить статус синхронизации.');
@@ -355,7 +456,14 @@ onUnmounted(stopPolling);
                         </div>
 
                         <div v-else class="mt-8 flex flex-col gap-3">
-                            <article v-for="organization in organizations" :key="organization.id" class="border border-white/25 bg-black/10 p-4">
+                            <button
+                                v-for="organization in organizations"
+                                :key="organization.id"
+                                class="w-full border p-4 text-left transition-colors"
+                                :class="activeOrganizationId === organization.id ? 'border-[#efc84a] bg-black/20' : 'border-white/25 bg-black/10 hover:border-white/50'"
+                                type="button"
+                                @click="selectOrganization(organization)"
+                            >
                                 <div class="flex items-start justify-between gap-4">
                                     <div class="min-w-0">
                                         <p class="truncate text-sm font-bold">{{ organization.name || 'Новая компания' }}</p>
@@ -370,10 +478,90 @@ onUnmounted(stopPolling);
 
                                 <p v-if="organization.sync?.processed_reviews" class="mt-3 text-xs text-white/70">Получено отзывов: {{ organization.sync.processed_reviews }}</p>
                                 <p v-if="organization.sync?.error?.message" class="mt-3 text-xs leading-5 text-white" role="alert">{{ organization.sync.error.message }}</p>
-                            </article>
+                            </button>
                         </div>
                     </aside>
                 </div>
+
+                <section v-if="activeOrganization" class="mt-8 border border-black/15 bg-[#fcfbf7]">
+                    <div class="flex flex-col gap-5 border-b border-black/15 px-6 py-6 sm:px-8 lg:flex-row lg:items-end lg:justify-between">
+                        <div class="min-w-0">
+                            <p class="mb-2 text-xs font-bold uppercase tracking-[0.14em] text-[#e64b2f]">Выбранная компания</p>
+                            <h2 class="display-title truncate text-4xl tracking-[-0.035em] sm:text-5xl">{{ activeOrganization.name || 'Данные ещё загружаются' }}</h2>
+                            <a class="mt-3 block w-fit max-w-full truncate text-sm text-[#66645f] underline decoration-black/25 underline-offset-4 hover:text-[#191919]" :href="activeOrganization.url" rel="noreferrer" target="_blank">
+                                Открыть в Яндекс Картах
+                            </a>
+                        </div>
+                        <p class="text-sm text-[#77746d]">{{ statusLabel(activeOrganization.sync?.status) }}</p>
+                    </div>
+
+                    <div v-if="activeOrganization.sync?.status === 'completed'">
+                        <dl class="grid border-b border-black/15 sm:grid-cols-3">
+                            <div class="border-b border-black/15 px-6 py-7 sm:border-b-0 sm:border-r sm:px-8">
+                                <dt class="text-xs font-bold uppercase tracking-[0.12em] text-[#77746d]">Средний рейтинг</dt>
+                                <dd class="mt-3 flex items-baseline gap-2 text-4xl font-bold">
+                                    {{ activeOrganization.rating ?? '—' }}
+                                    <span class="text-lg text-[#e64b2f]" aria-hidden="true">★</span>
+                                </dd>
+                            </div>
+                            <div class="border-b border-black/15 px-6 py-7 sm:border-b-0 sm:border-r sm:px-8">
+                                <dt class="text-xs font-bold uppercase tracking-[0.12em] text-[#77746d]">Оценок</dt>
+                                <dd class="mt-3 text-4xl font-bold">{{ activeOrganization.ratings_count ?? 0 }}</dd>
+                            </div>
+                            <div class="px-6 py-7 sm:px-8">
+                                <dt class="text-xs font-bold uppercase tracking-[0.12em] text-[#77746d]">Отзывов</dt>
+                                <dd class="mt-3 text-4xl font-bold">{{ activeOrganization.reviews_count ?? 0 }}</dd>
+                            </div>
+                        </dl>
+
+                        <div class="px-6 py-7 sm:px-8 sm:py-9">
+                            <div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                                <div>
+                                    <p class="text-xs font-bold uppercase tracking-[0.14em] text-[#e64b2f]">Обратная связь</p>
+                                    <h3 class="display-title mt-2 text-3xl tracking-[-0.025em]">Отзывы клиентов</h3>
+                                </div>
+                                <p v-if="activeOrganization.last_synced_at" class="text-xs text-[#77746d]">Обновлено {{ formatDate(activeOrganization.last_synced_at) }}</p>
+                            </div>
+
+                            <div v-if="reviewsLoading" class="flex items-center gap-3 py-14 text-sm">
+                                <span class="loading-mark" aria-hidden="true"></span>
+                                Загружаем отзывы…
+                            </div>
+
+                            <div v-else-if="reviewsError" class="mt-7 border-l-2 border-[#e64b2f] pl-4">
+                                <p class="text-sm text-[#b62f1d]" role="alert">{{ reviewsError }}</p>
+                                <button class="mt-3 text-sm font-bold underline underline-offset-4" type="button" @click="loadReviews(reviewsMeta?.current_page ?? 1)">Повторить</button>
+                            </div>
+
+                            <div v-else-if="reviews.length === 0" class="py-14 text-sm text-[#77746d]">У компании пока нет доступных отзывов.</div>
+
+                            <div v-else class="mt-7 divide-y divide-black/10 border-y border-black/15">
+                                <article v-for="review in reviews" :key="review.id" class="grid gap-4 py-6 md:grid-cols-[180px_minmax(0,1fr)] md:gap-8">
+                                    <div>
+                                        <p class="font-bold">{{ review.author }}</p>
+                                        <p class="mt-1 text-xs text-[#77746d]">{{ formatDate(review.published_at) }}</p>
+                                        <p class="mt-3 text-sm font-bold text-[#e64b2f]" :aria-label="`Оценка ${review.rating} из 5`">{{ review.rating }} / 5 ★</p>
+                                    </div>
+                                    <p class="whitespace-pre-line text-[15px] leading-7 text-[#4f4d48]">{{ review.text || 'Автор оставил оценку без текста.' }}</p>
+                                </article>
+                            </div>
+
+                            <nav v-if="reviewsMeta && reviewsMeta.last_page > 1" class="mt-7 flex flex-col gap-4 border-t border-black/15 pt-6 sm:flex-row sm:items-center sm:justify-between" aria-label="Пагинация отзывов">
+                                <p class="text-sm text-[#77746d]">Страница {{ reviewsMeta.current_page }} из {{ reviewsMeta.last_page }}</p>
+                                <div class="flex gap-2">
+                                    <button class="page-button" :disabled="reviewsMeta.current_page === 1 || reviewsLoading" type="button" @click="changeReviewPage(reviewsMeta.current_page - 1)">Назад</button>
+                                    <button class="page-button" :disabled="reviewsMeta.current_page === reviewsMeta.last_page || reviewsLoading" type="button" @click="changeReviewPage(reviewsMeta.current_page + 1)">Вперёд</button>
+                                </div>
+                            </nav>
+                        </div>
+                    </div>
+
+                    <div v-else class="px-6 py-9 sm:px-8">
+                        <p class="max-w-2xl text-sm leading-6 text-[#66645f]">
+                            {{ isSyncing(activeOrganization) ? 'Карточка и отзывы появятся после завершения сбора данных.' : (activeOrganization.sync?.error?.message || 'Не удалось завершить синхронизацию.') }}
+                        </p>
+                    </div>
+                </section>
 
                 <footer class="mt-10 flex flex-col gap-2 border-t border-black/15 pt-5 text-xs text-[#77746d] sm:flex-row sm:justify-between">
                     <span>Отклик</span>

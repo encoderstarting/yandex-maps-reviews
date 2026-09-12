@@ -207,6 +207,27 @@ a {
     border-right-color: transparent;
 }
 
+.page-button {
+    min-width: 96px;
+    padding: 10px 14px;
+    border: 1px solid #191919;
+    color: #fff;
+    background: #191919;
+    font-size: 13px;
+    font-weight: 700;
+    transition: color 150ms ease, background-color 150ms ease;
+}
+
+.page-button:hover:not(:disabled) {
+    color: #191919;
+    background: #efc84a;
+}
+
+.page-button:disabled {
+    cursor: not-allowed;
+    opacity: 0.35;
+}
+
 @keyframes spin {
     to {
         transform: rotate(360deg);
