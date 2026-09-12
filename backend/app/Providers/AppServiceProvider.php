@@ -2,6 +2,8 @@
 
 namespace App\Providers;
 
+use App\Contracts\OrganizationParser;
+use App\Services\YandexMaps\YandexMapsParser;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
@@ -16,6 +18,8 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
+        $this->app->bind(OrganizationParser::class, YandexMapsParser::class);
+
         Model::preventLazyLoading(! app()->isProduction());
 
         $this->app->booted(function (): void {
