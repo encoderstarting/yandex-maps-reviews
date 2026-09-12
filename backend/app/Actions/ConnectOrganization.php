@@ -2,6 +2,7 @@
 
 namespace App\Actions;
 
+use App\Jobs\SyncOrganizationJob;
 use App\Models\Organization;
 use App\Models\User;
 use App\Support\YandexMapsUrlNormalizer;
@@ -14,21 +15,25 @@ class ConnectOrganization
 
     public function execute(User $user, string $sourceUrl): Organization
     {
-        return DB::transaction(function () use ($user, $sourceUrl): Organization {
+        $organization = DB::transaction(function () use ($user, $sourceUrl): Organization {
             $organization = $user->organizations()->firstOrCreate(
                 ['normalized_url' => $this->normalizer->normalize($sourceUrl)],
                 ['source_url' => $sourceUrl],
             );
 
             if ($organization->wasRecentlyCreated) {
-                $organization->syncRuns()->create([
+                $syncRun = $organization->syncRuns()->create([
                     'status' => SyncStatus::Pending,
                     'progress' => 0,
                     'processed_reviews' => 0,
                 ]);
+
+                SyncOrganizationJob::dispatch($organization->id, $syncRun->id)->afterCommit();
             }
 
             return $organization->load('latestSyncRun');
         });
+
+        return $organization;
     }
 }

@@ -22,6 +22,8 @@ class YandexMapsParserTest extends TestCase
 
     public function test_parser_extracts_organization_and_all_review_pages(): void
     {
+        $progress = [];
+
         Http::fake([
             'https://yandex.ru/maps/org/test/123456/' => Http::response($this->fixture('overview.html')),
             'https://yandex.ru/maps/org/123456/reviews/?page=1' => Http::response($this->fixture('reviews-page-1.html')),
@@ -30,6 +32,9 @@ class YandexMapsParserTest extends TestCase
 
         $result = app(OrganizationParser::class)->parse(
             'https://yandex.ru/maps/org/test/123456/',
+            function (int $currentPage, int $totalPages, int $processedReviews) use (&$progress): void {
+                $progress[] = [$currentPage, $totalPages, $processedReviews];
+            },
         );
 
         $this->assertSame('123456', $result->externalId);
@@ -44,6 +49,7 @@ class YandexMapsParserTest extends TestCase
         $this->assertSame('Отличный кофе', $result->reviews[0]->text);
         $this->assertSame('Пользователь Яндекса', $result->reviews[2]->authorName);
         $this->assertNull($result->reviews[2]->text);
+        $this->assertSame([[1, 2, 2], [2, 2, 3]], $progress);
 
         Http::assertSentCount(3);
         Http::assertSent(fn (Request $request): bool => $request->url()

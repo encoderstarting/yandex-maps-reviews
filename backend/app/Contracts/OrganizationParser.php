@@ -3,8 +3,10 @@
 namespace App\Contracts;
 
 use App\Data\ParsedOrganization;
+use Closure;
 
 interface OrganizationParser
 {
-    public function parse(string $url): ParsedOrganization;
+    /** @param null|Closure(int, int, int): void $onProgress */
+    public function parse(string $url, ?Closure $onProgress = null): ParsedOrganization;
 }

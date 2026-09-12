@@ -6,6 +6,7 @@ use App\Contracts\OrganizationParser;
 use App\Data\ParsedOrganization;
 use App\Exceptions\YandexMaps\YandexMapsSourceChangedException;
 use App\Exceptions\YandexMaps\YandexMapsUnavailableException;
+use Closure;
 
 class YandexMapsParser implements OrganizationParser
 {
@@ -14,7 +15,7 @@ class YandexMapsParser implements OrganizationParser
         private readonly YandexMapsStateExtractor $extractor,
     ) {}
 
-    public function parse(string $url): ParsedOrganization
+    public function parse(string $url, ?Closure $onProgress = null): ParsedOrganization
     {
         $business = $this->extractor->extractBusiness($this->client->fetch($url));
         $reviewBaseUrl = $this->reviewBaseUrl($url, $business->externalId);
@@ -57,6 +58,8 @@ class YandexMapsParser implements OrganizationParser
 
                 $reviewsById[$review->externalId] = $review;
             }
+
+            $onProgress?->__invoke($page, $totalPages, count($reviewsById));
 
             if ($page < $totalPages && ($reviewPage->reviews === [] || $newReviews === 0)) {
                 throw new YandexMapsSourceChangedException(

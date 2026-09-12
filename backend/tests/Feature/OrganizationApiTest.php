@@ -2,17 +2,26 @@
 
 namespace Tests\Feature;
 
+use App\Jobs\SyncOrganizationJob;
 use App\Models\Organization;
 use App\Models\Review;
 use App\Models\SyncRun;
 use App\Models\User;
 use App\SyncStatus;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
+use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
 
 class OrganizationApiTest extends TestCase
 {
     use LazilyRefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        Queue::fake();
+    }
 
     public function test_guest_cannot_use_organization_api(): void
     {
@@ -46,6 +55,9 @@ class OrganizationApiTest extends TestCase
             'status' => SyncStatus::Pending->value,
             'progress' => 0,
         ]);
+        Queue::assertPushed(SyncOrganizationJob::class, function (SyncOrganizationJob $job): bool {
+            return $job->organizationId > 0 && $job->syncRunId > 0;
+        });
     }
 
     public function test_equivalent_url_does_not_create_duplicate_organization_or_sync_run(): void
@@ -61,6 +73,7 @@ class OrganizationApiTest extends TestCase
 
         $this->assertDatabaseCount('organizations', 1);
         $this->assertDatabaseCount('sync_runs', 1);
+        Queue::assertPushed(SyncOrganizationJob::class, 1);
     }
 
     public function test_invalid_organization_url_returns_field_error(): void
