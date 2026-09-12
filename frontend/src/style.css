@@ -179,8 +179,12 @@ a {
 }
 
 .company-input:disabled {
-    cursor: not-allowed;
+    cursor: wait;
     opacity: 0.65;
+}
+
+.company-input[aria-invalid='true'] {
+    border-color: #b62f1d;
 }
 
 .secondary-button {
@@ -189,9 +193,18 @@ a {
     background: #191919;
 }
 
-.secondary-button:disabled {
-    cursor: not-allowed;
-    opacity: 0.45;
+.secondary-button {
+    transition: color 150ms ease, background-color 150ms ease;
+}
+
+.secondary-button:hover:not(:disabled) {
+    color: #191919;
+    background: #efc84a;
+}
+
+.loading-mark-light {
+    border-color: #fff;
+    border-right-color: transparent;
 }
 
 @keyframes spin {
