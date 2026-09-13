@@ -1,6 +1,7 @@
 FROM php:8.4-apache
 
 ENV APACHE_DOCUMENT_ROOT=/var/www/html/public
+ARG PHPREDIS_VERSION=6.3.0
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
@@ -8,15 +9,18 @@ RUN apt-get update \
         libcurl4-openssl-dev \
         libonig-dev \
         libpq-dev \
-    && docker-php-ext-install -j"$(nproc)" curl mbstring opcache pcntl pdo_pgsql \
-    && pecl install redis \
-    && docker-php-ext-enable redis \
+    && curl -fsSL --retry 5 --retry-delay 2 \
+        "https://github.com/phpredis/phpredis/archive/refs/tags/${PHPREDIS_VERSION}.tar.gz" \
+        -o /tmp/phpredis.tar.gz \
+    && mkdir -p /usr/src/php/ext/redis \
+    && tar -xzf /tmp/phpredis.tar.gz --strip-components=1 -C /usr/src/php/ext/redis \
+    && docker-php-ext-install -j"$(nproc)" curl mbstring opcache pcntl pdo_pgsql redis \
     && a2enmod rewrite \
     && sed -ri -e 's!/var/www/html!${APACHE_DOCUMENT_ROOT}!g' \
         /etc/apache2/sites-available/*.conf \
         /etc/apache2/apache2.conf \
         /etc/apache2/conf-available/*.conf \
-    && rm -rf /var/lib/apt/lists/* /tmp/pear
+    && rm -rf /var/lib/apt/lists/* /tmp/phpredis.tar.gz
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends unzip \
