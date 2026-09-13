@@ -80,6 +80,7 @@ services:
         condition: service_healthy
     networks:
       - private
+      - egress
 
   postgres:
     image: postgres:18-alpine
@@ -116,6 +117,7 @@ networks:
   public:
   private:
     internal: true
+  egress:
 
 volumes:
   caddy_data:

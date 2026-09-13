@@ -104,7 +104,7 @@ pnpm audit --prod
 
 ## Развёртывание на VPS
 
-Для публичного стенда подготовлен отдельный [`compose.production.yaml`](compose.production.yaml). Он запускает Caddy с автоматическим HTTPS, собранный Vue SPA, Laravel API, постоянный worker, PostgreSQL и Redis. База данных и Redis не публикуются в интернет.
+Для публичного стенда подготовлен отдельный [`compose.production.yaml`](compose.production.yaml). Он запускает Caddy с автоматическим HTTPS, собранный Vue SPA, Laravel API, постоянный worker, PostgreSQL и Redis. База данных и Redis не публикуются в интернет, а worker получает исходящий доступ к Яндекс Картам через отдельную Docker-сеть без открытых портов.
 
 Рекомендуемая конфигурация сервера — Ubuntu 24.04, 2 vCPU, 4 ГБ RAM, 40–50 ГБ NVMe и публичный IPv4. Переменные production-окружения, команды первого запуска, обновления и просмотра логов описаны в [`deploy/README.md`](deploy/README.md). Локальный Sail при этом не меняется.
 
