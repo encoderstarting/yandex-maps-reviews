@@ -61,7 +61,7 @@ docker compose --env-file deploy/.env -f compose.production.yaml up -d --build
 docker compose --env-file deploy/.env -f compose.production.yaml run --rm backend php artisan migrate --force
 ```
 
-Worker ограничен параметром `--max-time=3600`, поэтому раз в час корректно завершается и автоматически создаётся заново политикой `restart: unless-stopped`. Это позволяет ему подхватывать новый код после обновления образа.
+Worker ограничен параметром `--max-time=3600`, поэтому раз в час корректно завершается и автоматически создаётся заново политикой `restart: unless-stopped`. Это позволяет ему подхватывать новый код после обновления образа. Для корректной остановки очереди Compose явно отправляет `SIGTERM`, а выполняющаяся Job может завершиться в течение `stop_grace_period`.
 
 ## Остановка и резервная копия
 

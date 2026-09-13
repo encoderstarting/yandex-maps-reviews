@@ -69,6 +69,7 @@ services:
     restart: unless-stopped
     user: www-data
     command: php artisan queue:work redis --sleep=3 --tries=4 --timeout=1800 --max-time=3600
+    stop_signal: SIGTERM
     stop_grace_period: 30m
     env_file:
       - ${DEPLOY_ENV_FILE:-./deploy/.env}
