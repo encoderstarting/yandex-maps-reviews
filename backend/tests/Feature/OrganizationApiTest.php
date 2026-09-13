@@ -60,6 +60,20 @@ class OrganizationApiTest extends TestCase
         });
     }
 
+    public function test_user_can_connect_organization_url_without_slug(): void
+    {
+        $user = User::factory()->create();
+
+        $this->actingAs($user)->postJson('/api/v1/organizations', [
+            'url' => 'https://yandex.ru/maps/org/123456',
+        ])->assertCreated();
+
+        $this->assertDatabaseHas('organizations', [
+            'user_id' => $user->id,
+            'normalized_url' => 'https://yandex.ru/maps/org/123456',
+        ]);
+    }
+
     public function test_equivalent_url_does_not_create_duplicate_organization_or_sync_run(): void
     {
         $user = User::factory()->create();
@@ -86,6 +100,14 @@ class OrganizationApiTest extends TestCase
 
         $this->actingAs($user)->postJson('/api/v1/organizations', [
             'url' => 'http://yandex.ru/maps/org/test',
+        ])->assertUnprocessable()->assertJsonValidationErrors(['url']);
+
+        $this->actingAs($user)->postJson('/api/v1/organizations', [
+            'url' => 'https://yandex.ru/maps/',
+        ])->assertUnprocessable()->assertJsonValidationErrors(['url']);
+
+        $this->actingAs($user)->postJson('/api/v1/organizations', [
+            'url' => 'https://yandex.ru/maps/org/test_company/not-an-id',
         ])->assertUnprocessable()->assertJsonValidationErrors(['url']);
 
         $this->actingAs($user)->postJson('/api/v1/organizations', [])

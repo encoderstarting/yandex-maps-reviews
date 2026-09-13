@@ -26,8 +26,9 @@ class YandexMapsUrl implements ValidationRule
         $host = strtolower((string) ($parts['host'] ?? ''));
         $path = (string) ($parts['path'] ?? '');
         $allowedHosts = ['yandex.ru', 'www.yandex.ru', 'yandex.com', 'www.yandex.com'];
+        $isOrganizationPath = preg_match('#^/maps/org/(?:[^/]+/)?[0-9]+/?$#u', $path) === 1;
 
-        if ($scheme !== 'https' || ! in_array($host, $allowedHosts, true) || ! str_starts_with($path, '/maps/')) {
+        if ($scheme !== 'https' || ! in_array($host, $allowedHosts, true) || ! $isOrganizationPath) {
             $fail('Разрешены только HTTPS-ссылки на организации в Яндекс Картах.');
         }
     }
