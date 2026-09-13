@@ -16,6 +16,7 @@ const organizationsLoading = ref(false);
 const organizationUrl = ref('');
 const organizationUrlError = ref('');
 const addingOrganization = ref(false);
+const syncingOrganizationId = ref(null);
 const organizationNotice = ref('');
 const activeOrganizationId = ref(null);
 const reviews = ref([]);
@@ -202,6 +203,29 @@ async function addOrganization() {
         }
     } finally {
         addingOrganization.value = false;
+    }
+}
+
+async function startOrganizationSync(organization) {
+    syncingOrganizationId.value = organization.id;
+    error.value = '';
+
+    try {
+        const response = await apiClient.post(`/api/v1/organizations/${organization.id}/sync`);
+        organization.sync = response.data.data;
+
+        if (activeOrganizationId.value === organization.id) {
+            reviewsRequestId += 1;
+            reviews.value = [];
+            reviewsMeta.value = null;
+            reviewsError.value = '';
+        }
+
+        schedulePolling();
+    } catch (requestError) {
+        error.value = requestMessage(requestError, 'Не удалось запустить синхронизацию.');
+    } finally {
+        syncingOrganizationId.value = null;
     }
 }
 
@@ -492,7 +516,20 @@ onUnmounted(stopPolling);
                                 Открыть в Яндекс Картах
                             </a>
                         </div>
-                        <p class="text-sm text-[#77746d]">{{ statusLabel(activeOrganization.sync?.status) }}</p>
+                        <div class="flex flex-col items-start gap-3 lg:items-end">
+                            <p class="text-sm text-[#77746d]">{{ statusLabel(activeOrganization.sync?.status) }}</p>
+                            <button
+                                v-if="!isSyncing(activeOrganization)"
+                                class="secondary-button px-5 py-3 text-sm font-bold disabled:cursor-wait disabled:opacity-60"
+                                :disabled="syncingOrganizationId === activeOrganization.id"
+                                type="button"
+                                @click="startOrganizationSync(activeOrganization)"
+                            >
+                                {{ syncingOrganizationId === activeOrganization.id
+                                    ? 'Запускаем…'
+                                    : (activeOrganization.sync?.status === 'completed' ? 'Обновить данные' : 'Повторить синхронизацию') }}
+                            </button>
+                        </div>
                     </div>
 
                     <div v-if="activeOrganization.sync?.status === 'completed'">

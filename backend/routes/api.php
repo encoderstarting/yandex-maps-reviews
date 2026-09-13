@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\V1\OrganizationController;
 use App\Http\Controllers\Api\V1\OrganizationReviewController;
+use App\Http\Controllers\Api\V1\OrganizationSyncController;
 use App\Http\Controllers\Api\V1\OrganizationSyncStatusController;
 use App\Http\Resources\UserResource;
 use Illuminate\Http\Request;
@@ -24,4 +25,7 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function (): void {
     Route::get('/organizations/{organizationId}/sync-status', OrganizationSyncStatusController::class)
         ->whereNumber('organizationId')
         ->name('api.v1.organizations.sync-status.show');
+    Route::post('/organizations/{organizationId}/sync', OrganizationSyncController::class)
+        ->whereNumber('organizationId')
+        ->name('api.v1.organizations.sync.store');
 });

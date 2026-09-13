@@ -30,6 +30,7 @@ class OrganizationApiTest extends TestCase
         $this->getJson('/api/v1/organizations/1')->assertUnauthorized();
         $this->getJson('/api/v1/organizations/1/reviews')->assertUnauthorized();
         $this->getJson('/api/v1/organizations/1/sync-status')->assertUnauthorized();
+        $this->postJson('/api/v1/organizations/1/sync')->assertUnauthorized();
     }
 
     public function test_user_can_connect_yandex_maps_organization(): void
@@ -177,5 +178,59 @@ class OrganizationApiTest extends TestCase
 
         $this->actingAs($user)->getJson("/api/v1/organizations/{$foreignOrganization->id}/sync-status")
             ->assertNotFound();
+    }
+
+    public function test_user_can_start_repeated_sync_for_own_organization(): void
+    {
+        $user = User::factory()->create();
+        $organization = Organization::factory()->for($user)->create();
+        SyncRun::factory()->for($organization)->create([
+            'status' => SyncStatus::Completed,
+            'progress' => 100,
+        ]);
+
+        $response = $this->actingAs($user)
+            ->postJson("/api/v1/organizations/{$organization->id}/sync");
+
+        $response
+            ->assertAccepted()
+            ->assertJsonPath('data.status', SyncStatus::Pending->value)
+            ->assertJsonPath('data.progress', 0);
+        $this->assertDatabaseCount('sync_runs', 2);
+        Queue::assertPushed(SyncOrganizationJob::class, function (SyncOrganizationJob $job) use ($organization): bool {
+            return $job->organizationId === $organization->id;
+        });
+    }
+
+    public function test_repeated_sync_does_not_duplicate_active_job(): void
+    {
+        $user = User::factory()->create();
+        $organization = Organization::factory()->for($user)->create();
+        $syncRun = SyncRun::factory()->for($organization)->create([
+            'status' => SyncStatus::Running,
+            'progress' => 40,
+        ]);
+
+        $this->actingAs($user)
+            ->postJson("/api/v1/organizations/{$organization->id}/sync")
+            ->assertOk()
+            ->assertJsonPath('data.id', $syncRun->id)
+            ->assertJsonPath('data.status', SyncStatus::Running->value);
+
+        $this->assertDatabaseCount('sync_runs', 1);
+        Queue::assertNothingPushed();
+    }
+
+    public function test_user_cannot_start_sync_for_foreign_organization(): void
+    {
+        $user = User::factory()->create();
+        $foreignOrganization = Organization::factory()->create();
+
+        $this->actingAs($user)
+            ->postJson("/api/v1/organizations/{$foreignOrganization->id}/sync")
+            ->assertNotFound();
+
+        $this->assertDatabaseCount('sync_runs', 0);
+        Queue::assertNothingPushed();
     }
 }

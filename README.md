@@ -82,10 +82,11 @@ GET  /api/v1/organizations
 POST /api/v1/organizations
 GET  /api/v1/organizations/{id}
 GET  /api/v1/organizations/{id}/sync-status
+POST /api/v1/organizations/{id}/sync
 GET  /api/v1/organizations/{id}/reviews?page=1
 ```
 
-Подключённая организация получает статус `pending`. Запущенный worker забирает задачу из Redis, обновляет прогресс, сохраняет организацию, отзывы и историю агрегатов.
+Подключённая организация получает статус `pending`. Запущенный worker забирает задачу из Redis, обновляет прогресс, сохраняет организацию, отзывы и историю агрегатов. После завершения пользователь может запустить обновление повторно; активная Job при этом не дублируется.
 
 ## Проверки
 

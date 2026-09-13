@@ -172,4 +172,25 @@ describe('просмотр отзывов', () => {
         expect(wrapper.text()).toContain('Уютное место');
         expect(wrapper.text()).toContain('Страница 2 из 2');
     });
+
+    it('запускает повторную синхронизацию компании', async () => {
+        apiClient.post.mockResolvedValue({
+            status: 202,
+            data: {
+                data: { id: 12, status: 'pending', progress: 0, processed_reviews: 0 },
+            },
+        });
+        const wrapper = mountApp();
+        await flushPromises();
+        const syncButton = wrapper.findAll('button')
+            .find((button) => button.text() === 'Обновить данные');
+
+        expect(syncButton).toBeDefined();
+        await syncButton.trigger('click');
+        await flushPromises();
+
+        expect(apiClient.post).toHaveBeenCalledWith('/api/v1/organizations/7/sync');
+        expect(wrapper.text()).toContain('Ожидает запуска');
+        expect(wrapper.text()).not.toContain('Анна');
+    });
 });
